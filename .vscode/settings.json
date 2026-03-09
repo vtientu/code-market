@@ -1,0 +1,23 @@
+{
+  // Prisma: use local installation (Prisma 5) instead of bundled language server
+  "prisma.prismaFmtBinPath": "${workspaceFolder}/backend/node_modules/.bin/prisma",
+
+  // Spell check: support Vietnamese words in source files
+  "cSpell.language": "en,vi",
+
+  // Editor defaults
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // Per-language formatters
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+
+  // TypeScript: use workspace version
+  "typescript.tsdk": "backend/node_modules/typescript/lib",
+
+  // ESLint: lint backend TypeScript files
+  "eslint.workingDirectories": ["backend"],
+  "eslint.validate": ["typescript"]
+}
