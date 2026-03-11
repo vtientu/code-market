@@ -39,8 +39,8 @@ enum PaymentStatus {
 }
 
 enum PaymentMethod {
-  STRIPE
-  PAYPAL
+  MOMO
+  VNPAY
   WALLET
 }
 
