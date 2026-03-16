@@ -407,7 +407,30 @@ export class PaymentsService {
         });
       }
 
-      // 4. Clear buyer cart for purchased products
+      // 4. Create license for each purchased product
+      for (const item of order.items) {
+        const latestVersion = await tx.productVersion.findFirst({
+          where: { productId: item.product.id, isLatest: true },
+          select: { id: true },
+        });
+        await tx.license.upsert({
+          where: {
+            userId_productId: {
+              userId: order.buyerId,
+              productId: item.product.id,
+            },
+          },
+          create: {
+            userId: order.buyerId,
+            productId: item.product.id,
+            orderId: order.id,
+            latestVersionId: latestVersion?.id ?? null,
+          },
+          update: {},
+        });
+      }
+
+      // 5. Clear buyer cart for purchased products
       await tx.cartItem.deleteMany({
         where: {
           userId: order.buyerId,

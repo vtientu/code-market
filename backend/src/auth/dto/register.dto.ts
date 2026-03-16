@@ -8,7 +8,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Role } from '@generated/prisma/client.js';
+import { Role } from '@prisma/client';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })

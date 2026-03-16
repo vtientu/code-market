@@ -7,13 +7,13 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { ProductStatus } from '@generated/prisma/client.js';
+import { ProductStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { paginate } from '../common/dto/pagination.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductQueryDto } from './dto/product-query.dto.js';
-import { AddProductFileDto, AddProductImageDto } from './dto/add-file.dto.js';
+import { AddProductVersionDto, AddProductImageDto } from './dto/add-file.dto.js';
 import { UpdateProductStatusDto } from './dto/update-status.dto.js';
 
 const productCacheKey = (slug: string) => `cache:product:slug:${slug}`;
@@ -111,6 +111,7 @@ export class ProductsService {
         category: true,
         tags: { include: { tag: true } },
         images: { orderBy: { sortOrder: 'asc' } },
+        versions: { orderBy: { createdAt: 'desc' } },
         _count: { select: { reviews: true } },
       },
     });
@@ -205,18 +206,44 @@ export class ProductsService {
     });
   }
 
-  async addFile(sellerId: string, productId: string, dto: AddProductFileDto) {
+  async addVersion(
+    sellerId: string,
+    productId: string,
+    dto: AddProductVersionDto,
+  ) {
     await this.findOwnedOrFail(sellerId, productId);
-    return this.prisma.prisma.productFile.create({
-      data: { productId, ...dto },
+    await this.prisma.prisma.productVersion.updateMany({
+      where: { productId, isLatest: true },
+      data: { isLatest: false },
+    });
+    return this.prisma.prisma.productVersion.create({
+      data: { productId, ...dto, isLatest: true },
     });
   }
 
-  async removeFile(sellerId: string, productId: string, fileId: string) {
+  async removeVersion(sellerId: string, productId: string, versionId: string) {
     await this.findOwnedOrFail(sellerId, productId);
-    await this.prisma.prisma.productFile.deleteMany({
-      where: { id: fileId, productId },
+    const target = await this.prisma.prisma.productVersion.findFirst({
+      where: { id: versionId, productId },
+      select: { id: true, isLatest: true },
     });
+    if (!target) return null;
+
+    await this.prisma.prisma.productVersion.delete({ where: { id: versionId } });
+
+    if (target.isLatest) {
+      const next = await this.prisma.prisma.productVersion.findFirst({
+        where: { productId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (next) {
+        await this.prisma.prisma.productVersion.update({
+          where: { id: next.id },
+          data: { isLatest: true },
+        });
+      }
+    }
     return null;
   }
 
@@ -263,7 +290,10 @@ export class ProductsService {
 
     const updated = await this.prisma.prisma.product.update({
       where: { id },
-      data: { status: dto.status },
+      data: {
+        status: dto.status,
+        rejectionReason: dto.rejectionReason ?? null,
+      },
     });
 
     await this.cache.del(productCacheKey(product.slug));

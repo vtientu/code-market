@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider   = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -48,6 +48,14 @@ enum WalletTransactionType {
   EARNING    // seller receives from a sale
   WITHDRAWAL // seller withdraws to bank
   REFUND     // refund deducted from seller
+  PURCHASE   // buyer pays via wallet balance
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
 }
 
 enum WalletTransactionStatus {
@@ -78,6 +86,7 @@ model User {
   wallet        Wallet?
   cartItems     CartItem[]
   notifications Notification[]
+  licenses      License[]
 
   @@map("users")
 }
@@ -143,14 +152,17 @@ model Product {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  seller     User           @relation(fields: [sellerId], references: [id])
-  category   Category       @relation(fields: [categoryId], references: [id])
+  rejectionReason String? @db.Text
+
+  seller     User             @relation(fields: [sellerId], references: [id])
+  category   Category         @relation(fields: [categoryId], references: [id])
   tags       ProductTag[]
-  files      ProductFile[]
+  versions   ProductVersion[]
   images     ProductImage[]
   reviews    Review[]
   orderItems OrderItem[]
   cartItems  CartItem[]
+  licenses   License[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -158,18 +170,22 @@ model Product {
   @@map("products")
 }
 
-model ProductFile {
-  id        String   @id @default(uuid())
-  productId String
-  fileName  String
-  fileUrl   String   // stored in private storage, only accessible after purchase
-  fileSize  Int      // bytes
-  version   String   @default("1.0.0")
-  createdAt DateTime @default(now())
+model ProductVersion {
+  id            String   @id @default(uuid())
+  productId     String
+  versionNumber String   // e.g. "1.0.0", "1.1.0"
+  changelog     String?  @db.Text
+  fileName      String
+  fileUrl       String   // stored in private storage, only accessible after purchase
+  fileSize      Int      // bytes
+  isLatest      Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product  Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  licenses License[]
 
-  @@map("product_files")
+  @@index([productId])
+  @@map("product_versions")
 }
 
 model ProductImage {
@@ -207,9 +223,10 @@ model Order {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  buyer   User        @relation("BuyerOrders", fields: [buyerId], references: [id])
-  items   OrderItem[]
-  payment Payment?
+  buyer    User        @relation("BuyerOrders", fields: [buyerId], references: [id])
+  items    OrderItem[]
+  payment  Payment?
+  licenses License[]
 
   @@index([buyerId])
   @@map("orders")
@@ -255,8 +272,9 @@ model Wallet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions WalletTransaction[]
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   WalletTransaction[]
+  payoutRequests PayoutRequest[]
 
   @@map("wallets")
 }
@@ -312,6 +330,55 @@ model CartItem {
 
   @@unique([userId, productId])
   @@map("cart_items")
+}
+
+// ─────────────────────────────────────────────
+// LICENSE (access rights after purchase)
+// ─────────────────────────────────────────────
+
+model License {
+  id               String          @id @default(uuid())
+  userId           String
+  productId        String
+  orderId          String
+  licenseKey       String          @unique @default(uuid())
+  downloadCount    Int             @default(0)
+  latestVersionId  String?
+  expiresAt        DateTime?       // null = lifetime
+  createdAt        DateTime        @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order         Order          @relation(fields: [orderId], references: [id])
+  latestVersion ProductVersion? @relation(fields: [latestVersionId], references: [id])
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("licenses")
+}
+
+// ─────────────────────────────────────────────
+// PAYOUT REQUEST (seller withdraw to bank)
+// ─────────────────────────────────────────────
+
+model PayoutRequest {
+  id            String       @id @default(uuid())
+  walletId      String
+  amount        Decimal      @db.Decimal(10, 2)
+  status        PayoutStatus @default(PENDING)
+  bankName      String
+  bankAccount   String
+  accountHolder String
+  note          String?      @db.Text
+  rejectionNote String?      @db.Text
+  processedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@map("payout_requests")
 }
 
 // ─────────────────────────────────────────────

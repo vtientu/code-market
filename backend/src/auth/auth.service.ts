@@ -10,7 +10,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import type { StringValue } from 'ms';
-import { Role } from '@generated/prisma/client.js';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';

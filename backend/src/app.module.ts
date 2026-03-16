@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -17,6 +17,7 @@ import { OrdersModule } from './orders/orders.module.js';
 import { WalletModule } from './wallet/wallet.module.js';
 import { ReviewsModule } from './reviews/reviews.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+import { LicensesModule } from './licenses/licenses.module.js';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { PaymentsModule } from './payments/payments.module.js';
     WalletModule,
     PaymentsModule,
     ReviewsModule,
+    LicensesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

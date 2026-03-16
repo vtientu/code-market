@@ -58,15 +58,82 @@ export class WalletService {
         data: { balance: { decrement: Number(dto.amount) } },
       });
 
-      return tx.walletTransaction.create({
+      return tx.payoutRequest.create({
         data: {
           walletId: wallet.id,
-          type: 'WITHDRAWAL',
           amount: dto.amount,
-          status: 'PENDING',
-          description: dto.destination
-            ? `Withdrawal to ${dto.destination}`
-            : 'Withdrawal request',
+          bankName: dto.bankName,
+          bankAccount: dto.bankAccount,
+          accountHolder: dto.accountHolder,
+          note: dto.note,
+        },
+      });
+    });
+  }
+
+  // ── Admin ─────────────────────────────────────────────
+
+  async getPayoutRequests(query: PaginationDto) {
+    const { page, limit } = query;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await this.prisma.prisma.$transaction([
+      this.prisma.prisma.payoutRequest.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          wallet: {
+            include: {
+              user: { select: { id: true, username: true, email: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.prisma.payoutRequest.count(),
+    ]);
+
+    return paginate(items, total, page, limit);
+  }
+
+  async processPayoutRequest(
+    id: string,
+    approve: boolean,
+    rejectionNote?: string,
+  ) {
+    return this.prisma.prisma.$transaction(async (tx) => {
+      const payout = await tx.payoutRequest.findUnique({ where: { id } });
+      if (!payout) throw new NotFoundException('Payout request not found');
+      if (payout.status !== 'PENDING') {
+        throw new BadRequestException('Payout request is not in PENDING status');
+      }
+
+      if (approve) {
+        await tx.payoutRequest.update({
+          where: { id },
+          data: { status: 'COMPLETED', processedAt: new Date() },
+        });
+        return tx.walletTransaction.create({
+          data: {
+            walletId: payout.walletId,
+            type: 'WITHDRAWAL',
+            amount: payout.amount,
+            status: 'COMPLETED',
+            description: `Withdrawal to ${payout.bankName} - ${payout.bankAccount}`,
+          },
+        });
+      }
+
+      await tx.wallet.update({
+        where: { id: payout.walletId },
+        data: { balance: { increment: Number(payout.amount) } },
+      });
+      return tx.payoutRequest.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          rejectionNote: rejectionNote ?? null,
+          processedAt: new Date(),
         },
       });
     });

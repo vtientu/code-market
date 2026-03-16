@@ -1,7 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, IsUrl, Min } from 'class-validator';
 
-export class AddProductFileDto {
+export class AddProductVersionDto {
+  @ApiProperty({ example: '1.0.0' })
+  @IsString()
+  versionNumber: string;
+
+  @ApiPropertyOptional({ description: 'Changelog for this version' })
+  @IsOptional()
+  @IsString()
+  changelog?: string;
+
   @ApiProperty()
   @IsString()
   fileName: string;
@@ -14,11 +23,6 @@ export class AddProductFileDto {
   @IsInt()
   @Min(1)
   fileSize: number;
-
-  @ApiPropertyOptional({ default: '1.0.0' })
-  @IsOptional()
-  @IsString()
-  version?: string;
 }
 
 export class AddProductImageDto {

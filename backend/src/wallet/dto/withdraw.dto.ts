@@ -6,8 +6,20 @@ export class WithdrawDto {
   @IsDecimal({ decimal_digits: '0,2' })
   amount: string;
 
-  @ApiPropertyOptional({ description: 'Bank account or wallet address' })
+  @ApiProperty({ example: 'Vietcombank' })
+  @IsString()
+  bankName: string;
+
+  @ApiProperty({ example: '1234567890' })
+  @IsString()
+  bankAccount: string;
+
+  @ApiProperty({ example: 'NGUYEN VAN A' })
+  @IsString()
+  accountHolder: string;
+
+  @ApiPropertyOptional({ description: 'Optional note for this withdrawal' })
   @IsOptional()
   @IsString()
-  destination?: string;
+  note?: string;
 }

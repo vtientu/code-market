@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProductStatus } from '@generated/prisma/client.js';
+import { ProductStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AddCartItemDto } from './dto/add-cart-item.dto.js';
 

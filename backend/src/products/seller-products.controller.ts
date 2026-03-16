@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Role } from '@generated/prisma/client.js';
+import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -21,7 +21,7 @@ import { ProductsService } from './products.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductQueryDto } from './dto/product-query.dto.js';
-import { AddProductFileDto, AddProductImageDto } from './dto/add-file.dto.js';
+import { AddProductVersionDto, AddProductImageDto } from './dto/add-file.dto.js';
 
 @ApiTags('Seller Products')
 @Controller('products')
@@ -69,25 +69,25 @@ export class SellerProductsController {
     return this.productsService.submit(user.id, id);
   }
 
-  @Post(':id/files')
-  @ApiOperation({ summary: 'Add downloadable file to product (Seller only)' })
-  addFile(
+  @Post(':id/versions')
+  @ApiOperation({ summary: 'Add a new version to product (Seller only)' })
+  addVersion(
     @CurrentUser() user: Express.User,
     @Param('id') id: string,
-    @Body() dto: AddProductFileDto,
+    @Body() dto: AddProductVersionDto,
   ) {
-    return this.productsService.addFile(user.id, id, dto);
+    return this.productsService.addVersion(user.id, id, dto);
   }
 
-  @Delete(':id/files/:fileId')
+  @Delete(':id/versions/:versionId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove file from product (Seller only)' })
-  removeFile(
+  @ApiOperation({ summary: 'Remove a version from product (Seller only)' })
+  removeVersion(
     @CurrentUser() user: Express.User,
     @Param('id') id: string,
-    @Param('fileId') fileId: string,
+    @Param('versionId') versionId: string,
   ) {
-    return this.productsService.removeFile(user.id, id, fileId);
+    return this.productsService.removeVersion(user.id, id, versionId);
   }
 
   @Post(':id/images')
