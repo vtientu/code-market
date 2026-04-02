@@ -17,7 +17,7 @@ const processEnv = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
 };
 
-const mergeSchema = clientSchema.extend(serverSchema);
+const mergeSchema = clientSchema.safeExtend(serverSchema.shape);
 const paredEnv = mergeSchema.safeParse(processEnv);
 
 if (!paredEnv.success) {
