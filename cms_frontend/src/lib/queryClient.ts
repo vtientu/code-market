@@ -1,11 +1,24 @@
+import { isHttpError } from "@/lib/httpError";
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const onGlobalError = (error: unknown) => {
-  const status = (error as any)?.response?.status;
-  if (status === 401) return; // Axios interceptor xử lý
-  const message = (error as Error)?.message ?? "Đã có lỗi xảy ra";
-  toast.error(message);
+  if (isHttpError(error)) {
+    if (error.status === 401) return;
+    toast.error(error.message);
+  }
+
+  if (error instanceof Error) {
+    toast.error(error.message);
+    return;
+  }
+
+  toast.error("Đã có lỗi xảy ra");
+};
+
+const retryFn = (failureCount: number, error: unknown): boolean => {
+  if (isHttpError(error) && error.status < 500) return false;
+  return failureCount < 2;
 };
 
 const queryClient = new QueryClient({
@@ -15,12 +28,9 @@ const queryClient = new QueryClient({
   mutationCache: new MutationCache({ onError: onGlobalError }),
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 phút – tránh refetch quá nhiều
+      staleTime: 1000 * 60 * 3, // 3 phút – tránh refetch quá nhiều
       gcTime: 1000 * 60 * 10, // 10 phút – giữ cache sau khi unmount
-      retry: (failureCount, error: any) => {
-        if (error?.response?.status < 500) return false;
-        return failureCount < 2;
-      },
+      retry: retryFn,
       refetchOnWindowFocus: false,
     },
     mutations: {
