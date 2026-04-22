@@ -7,19 +7,22 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
-import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard.js';
+
+const isProd = process.env['NODE_ENV'] === 'production';
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env['NODE_ENV'] === 'production',
-  sameSite: 'strict' as const,
+  secure: isProd,
+  // 'none' enables true cross-site BFF in prod (requires secure: true).
+  // 'lax' is fine for dev where API and clients share localhost.
+  sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/api/v1/auth',
 };
@@ -62,8 +65,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'Logout and clear refresh token' })
   async logout(
     @CurrentUser() user: Express.User,

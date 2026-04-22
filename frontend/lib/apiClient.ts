@@ -1,13 +1,32 @@
 import { env } from "@/env";
 import axios, { AxiosError } from "axios";
+import { tokenStore } from "@/lib/token-store";
+
+declare module "axios" {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean;
+  }
+}
+
+interface BackendEnvelope<T = unknown> {
+  success: boolean;
+  statusCode: number;
+  message?: string;
+  data: T;
+}
 
 const apiClient = axios.create({
   baseURL: env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
+    "X-Requested-With": "XMLHttpRequest",
   },
 });
+
+// Auth endpoints should not trigger the refresh-retry flow on 401.
+const AUTH_ENDPOINT_PATTERN = /\/auth\/(login|refresh|register|logout)(\b|\/|$)/;
+const isAuthEndpoint = (url?: string) => !!url && AUTH_ENDPOINT_PATTERN.test(url);
 
 let isRefreshing = false;
 
@@ -26,15 +45,38 @@ const processQueue = (error: AxiosError | null) => {
   failedQueue = [];
 };
 
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+apiClient.interceptors.request.use((config) => {
+  const token = tokenStore.get();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-    // Nếu lỗi 401 và không phải là request gọi api refresh chính nó
-    if (error.response?.status === 401 && !originalRequest._retry) {
+// Unwrap BE envelope: { success, statusCode, message, data } -> data
+// Only unwrap when the shape matches to avoid corrupting non-enveloped payloads.
+apiClient.interceptors.response.use(
+  (response) => {
+    const body = response.data as BackendEnvelope | undefined;
+    if (
+      body &&
+      typeof body === "object" &&
+      typeof body.success === "boolean" &&
+      typeof body.statusCode === "number" &&
+      "data" in body
+    ) {
+      response.data = body.data;
+    }
+    return response;
+  },
+  async (error: AxiosError) => {
+    const originalRequest = error.config;
+    if (!originalRequest) return Promise.reject(error);
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
       if (isRefreshing) {
-        // Nếu đang refresh, đẩy request này vào hàng chờ
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
@@ -46,20 +88,17 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Gọi API Refresh. Lưu ý: Endpoint này ở Backend sẽ đọc Refresh Token
-        // từ HttpOnly Cookie và Set-Cookie mới vào Header trả về.
-        await apiClient.post("/auth/refresh-token");
+        const response = await apiClient.post<{ accessToken: string }>("/auth/refresh");
+        tokenStore.set(response.data.accessToken);
 
         isRefreshing = false;
         processQueue(null);
 
-        // Thực hiện lại request ban đầu với Cookie mới đã được trình duyệt cập nhật
         return apiClient(originalRequest);
       } catch (refreshError) {
         isRefreshing = false;
         processQueue(refreshError as AxiosError);
 
-        // Nếu refresh thất bại (thẻ hết hạn thực sự), điều hướng về login
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }

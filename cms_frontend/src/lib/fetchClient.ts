@@ -2,11 +2,18 @@ import { HttpError } from "@/lib/httpError";
 import { tokenService } from "@/lib/tokenService";
 
 interface RequestOptions extends RequestInit {
-  params?: Record<string, string | number | boolean | undefined>;
+  // Accept any plain object — runtime guard (`isValidParam`) filters out null/undefined/NaN.
+  // Typed query interfaces shouldn't need an index signature to satisfy this.
+  params?: Record<string, unknown>;
   _retry?: boolean;
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL;
+if (!BASE_URL) throw new Error("VITE_API_URL is not defined");
+
+// Auth endpoints should not trigger the refresh-retry flow on 401.
+const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|refresh|register|logout)(\b|\/|$)/;
+const isAuthEndpoint = (endpoint: string) => AUTH_ENDPOINT_PATTERN.test(endpoint);
 
 // Fn dựng URL với params
 export const buildUrl = (
@@ -48,10 +55,10 @@ const request = async <T>(
   const response = await fetch(buildUrl(endpoint, params), {
     ...init,
     headers: buildHeaders(init),
-    credentials: "same-origin",
+    credentials: "include",
   });
 
-  if (response.status === 401 && !_retry) {
+  if (response.status === 401 && !_retry && !isAuthEndpoint(endpoint)) {
     const refreshed = await tokenService.refresh();
 
     if (refreshed) {
@@ -73,11 +80,25 @@ const request = async <T>(
 
   if (response.status === 204) return undefined as T;
 
-  return response.json() as Promise<T>;
+  // Backend wraps responses in { success, statusCode, message, data }.
+  // Unwrap defensively — fall back to raw body if envelope shape is missing.
+  const body = (await response.json()) as
+    | { success?: boolean; statusCode?: number; data?: T }
+    | T;
+  if (
+    body &&
+    typeof body === "object" &&
+    "data" in (body as object) &&
+    typeof (body as { success?: unknown }).success === "boolean" &&
+    typeof (body as { statusCode?: unknown }).statusCode === "number"
+  ) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
 };
 
 export const fetchClient = {
-  get: <T>(endpoint: string, options: RequestOptions) =>
+  get: <T>(endpoint: string, options?: RequestOptions) =>
     request<T>(endpoint, {
       ...options,
       method: "GET",

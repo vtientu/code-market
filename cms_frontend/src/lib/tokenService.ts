@@ -1,4 +1,8 @@
 let accessToken: string | null = null;
+let refreshPromise: Promise<boolean> | null = null;
+
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) throw new Error("VITE_API_URL is not defined");
 
 export const tokenService = {
   getAccessToken: () => accessToken,
@@ -7,26 +11,33 @@ export const tokenService = {
     accessToken = token;
   },
 
-  clear: () => (accessToken = null),
+  clear: () => {
+    accessToken = null;
+  },
 
-  // Chỉ riêng api gọi tới refresh token thì BE sẽ đọc từ headers của request
-  refresh: async (): Promise<boolean> => {
-    try {
-      const response = await fetch("/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      });
-      if (!response.ok) return false;
+  refresh: (): Promise<boolean> => {
+    if (refreshPromise) return refreshPromise;
 
-      const data = await response.json();
-      tokenService.setAccessToken(data?.accessToken);
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        if (!response.ok) return false;
 
-      return true;
-    } catch {
-      return false;
-    }
+        const body = (await response.json()) as { data?: { accessToken?: string } };
+        const token = body?.data?.accessToken;
+        if (token) tokenService.setAccessToken(token);
+        return !!token;
+      } catch {
+        return false;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
   },
 };

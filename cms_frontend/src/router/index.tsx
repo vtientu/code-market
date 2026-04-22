@@ -1,17 +1,22 @@
 import { lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
+import { ProtectedRoute } from "@/features/auth/components/protected-route";
 
 const Home = lazy(() => import("@/pages/Home"));
-const Product = lazy(() => import("@/pages/Product"))
+const Product = lazy(() => import("@/pages/Product"));
+const Login = lazy(() => import("@/pages/Login"));
 
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <Home />,
+    path: "/login",
+    element: <Login />,
   },
   {
-    path: "/product",
-    element: <Product />,
+    element: <ProtectedRoute />,
+    children: [
+      { path: "/", element: <Home /> },
+      { path: "/product", element: <Product /> },
+    ],
   },
 ]);
 
