@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "url": "http://localhost:5173/login",
+  "messageCount": 4,
+  "messages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting...",
+      "location": {
+        "url": "http://localhost:5173/@vite/client",
+        "lineNumber": 826,
+        "columnNumber": 8
+      },
+      "timestamp": 1776833952260
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected.",
+      "location": {
+        "url": "http://localhost:5173/@vite/client",
+        "lineNumber": 930,
+        "columnNumber": 11
+      },
+      "timestamp": 1776833952277
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "location": {
+        "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=78d483c5",
+        "lineNumber": 14336,
+        "columnNumber": 48
+      },
+      "timestamp": 1776833952372
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://localhost:5173/login"
+      },
+      "timestamp": 1776833952811
+    }
+  ]
+}
