@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
@@ -34,15 +26,9 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  async register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.register(dto);
-    const refreshToken = this.authService.getRefreshToken(
-      result.user.id,
-      result.user.role,
-    );
+    const refreshToken = this.authService.getRefreshToken(result.user.id, result.user.role);
     res.cookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
     return result;
   }
@@ -50,15 +36,9 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
-    const refreshToken = this.authService.getRefreshToken(
-      result.user.id,
-      result.user.role,
-    );
+    const refreshToken = this.authService.getRefreshToken(result.user.id, result.user.role);
     res.cookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTIONS);
     return result;
   }
@@ -67,10 +47,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'Logout and clear refresh token' })
-  async logout(
-    @CurrentUser() user: Express.User,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@CurrentUser() user: Express.User, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.id);
     res.clearCookie('refresh_token', { path: '/api/v1/auth' });
     return null;
@@ -80,15 +57,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'Rotate refresh token and get new access token' })
-  async refresh(
-    @CurrentUser() user: Express.User,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async refresh(@CurrentUser() user: Express.User, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.refresh(user.id, user.role);
-    const newRefreshToken = this.authService.getRefreshToken(
-      user.id,
-      user.role,
-    );
+    const newRefreshToken = this.authService.getRefreshToken(user.id, user.role);
     res.cookie('refresh_token', newRefreshToken, REFRESH_COOKIE_OPTIONS);
     return result;
   }
