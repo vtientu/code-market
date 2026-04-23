@@ -12,6 +12,8 @@
 
 <!-- Project-specific instructions for Claude Code -->
 
+Respond in Vietnamese.
+
 ## Documentation
 
 - Read `./README.md` for project context
