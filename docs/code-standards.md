@@ -33,12 +33,12 @@
 
 ### Variables & Constants
 - Use **camelCase** for variables: `userId`, `productTitle`, `totalAmount`
-- Use **UPPER_SNAKE_CASE** for constants: `JWT_EXPIRES_IN`, `MAX_FILE_SIZE`, `DEFAULT_PAGE_SIZE`
+- Use **UPPER_SNAKE_CASE** for constants: `MAX_FILE_SIZE`, `DEFAULT_PAGE_SIZE`, `JWT_ACCESS_EXPIRES_IN`
 - Boolean variables: prefix with `is` or `has`: `isActive`, `hasError`, `isEmailVerified`
 - React Hooks: prefix with `use`: `useProducts()`, `useAuth()`, `useFetchUser()`
 
 ### Environment Variables
-- Use **UPPER_SNAKE_CASE**: `DATABASE_URL`, `JWT_SECRET`, `AWS_S3_BUCKET`
+- Use **UPPER_SNAKE_CASE**: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `AWS_S3_BUCKET`
 - Prefix with `NEXT_PUBLIC_` if used in browser (Next.js): `NEXT_PUBLIC_API_URL`
 - Organize by domain: `JWT_*`, `AWS_*`, `MOMO_*`, `VNPAY_*`, `REDIS_*`
 

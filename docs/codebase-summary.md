@@ -185,22 +185,27 @@ Separate administrative interface (early stage).
 
 ### Backend Environment Variables
 ```
-DATABASE_URL=mysql://user:password@localhost:3306/code_market
+DATABASE_URL=mariadb://user:password@localhost:3306/code_market
 REDIS_HOST=localhost
 REDIS_PORT=6379
-JWT_SECRET=your-secret-key
+JWT_ACCESS_SECRET=your-access-secret
 JWT_REFRESH_SECRET=your-refresh-secret
-JWT_EXPIRES_IN=15m
+JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 FRONTEND_URL=http://localhost:3001
+CMS_URL=http://localhost:5173
+PLATFORM_FEE=0.1
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=xxx
 AWS_SECRET_ACCESS_KEY=xxx
 AWS_S3_BUCKET=code-market-bucket
-MOMO_SECRET=xxx
 MOMO_PARTNER_CODE=xxx
-VNPAY_SECRET=xxx
-VNPAY_TMNCODE=xxx
+MOMO_ACCESS_KEY=xxx
+MOMO_SECRET_KEY=xxx
+MOMO_IPN_ALLOWED_IPS=
+VNPAY_TMN_CODE=xxx
+VNPAY_HASH_SECRET=xxx
+VNPAY_IPN_ALLOWED_IPS=
 ```
 
 ### Frontend Environment Variables
