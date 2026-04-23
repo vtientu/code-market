@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProductStatus } from '@prisma/client';
+import { Prisma, ProductStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AddCartItemDto } from './dto/add-cart-item.dto.js';
 
@@ -61,8 +61,15 @@ export class CartService {
           product: { select: { id: true, title: true, price: true } },
         },
       });
-    } catch {
-      throw new ConflictException('Product is already in your cart');
+    } catch (err) {
+      // P2002 = unique constraint violation -> already in cart
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException('Product is already in your cart');
+      }
+      throw err;
     }
   }
 

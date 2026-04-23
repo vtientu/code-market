@@ -14,10 +14,21 @@ export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async placeOrder(buyerId: string, dto: CreateOrderDto) {
+    // Dedup ids — prevents pricing the same product twice.
+    const productIds = [...new Set(dto.productIds)];
+    if (productIds.length === 0) {
+      throw new BadRequestException('No products selected');
+    }
+
     return this.prisma.prisma.$transaction(async (tx) => {
-      // 1. Fetch and validate products
+      // 1. Lock product rows (SELECT ... FOR UPDATE) so price/status snapshot is stable.
+      await tx.$queryRawUnsafe(
+        `SELECT id FROM Product WHERE id IN (${productIds.map(() => '?').join(',')}) FOR UPDATE`,
+        ...productIds,
+      );
+
       const products = await tx.product.findMany({
-        where: { id: { in: dto.productIds } },
+        where: { id: { in: productIds } },
         select: {
           id: true,
           title: true,
@@ -27,7 +38,7 @@ export class OrdersService {
         },
       });
 
-      if (products.length !== dto.productIds.length) {
+      if (products.length !== productIds.length) {
         throw new NotFoundException('One or more products not found');
       }
 
@@ -40,10 +51,18 @@ export class OrdersService {
         );
       }
 
-      // 2. Check no duplicates already owned
+      // 2. Reject self-purchase
+      const ownProduct = products.find((p) => p.sellerId === buyerId);
+      if (ownProduct) {
+        throw new BadRequestException(
+          `You cannot purchase your own product "${ownProduct.title}"`,
+        );
+      }
+
+      // 3. Check no duplicates already owned
       const owned = await tx.orderItem.findFirst({
         where: {
-          productId: { in: dto.productIds },
+          productId: { in: productIds },
           order: { buyerId, status: 'PAID' },
         },
         include: { product: { select: { title: true } } },
@@ -55,10 +74,10 @@ export class OrdersService {
         );
       }
 
-      // 3. Calculate total
+      // 4. Calculate total from locked snapshot
       const totalAmount = products.reduce((sum, p) => sum + Number(p.price), 0);
 
-      // 4. Create order + items
+      // 5. Create order + items (price snapshotted on each item)
       return tx.order.create({
         data: {
           buyerId,

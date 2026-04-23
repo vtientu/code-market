@@ -39,11 +39,11 @@ export class ReviewsService {
       );
     }
 
-    // 3. Transaction: create review + update product aggregate
+    // 3. Transaction: create review + recalc product aggregate from source
     return this.prisma.prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({
         where: { id: dto.productId },
-        select: { id: true, slug: true, rating: true, reviewCount: true },
+        select: { id: true, slug: true },
       });
       if (!product) throw new NotFoundException('Product not found');
 
@@ -65,16 +65,16 @@ export class ReviewsService {
         },
       });
 
-      const newCount = product.reviewCount + 1;
-      const newRating =
-        (Number(product.rating) * product.reviewCount + dto.rating) / newCount;
-
+      // Recompute from source — race-safe vs read-then-write.
+      const agg = await tx.review.aggregate({
+        where: { productId: dto.productId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      });
+      const avg = agg._avg.rating ? Number(agg._avg.rating) : 0;
       await tx.product.update({
         where: { id: dto.productId },
-        data: {
-          reviewCount: newCount,
-          rating: newRating.toFixed(2),
-        },
+        data: { reviewCount: agg._count._all, rating: avg.toFixed(2) },
       });
 
       await this.cache.del(`cache:product:slug:${product.slug}`);
@@ -110,7 +110,27 @@ export class ReviewsService {
   }
 
   async remove(id: string) {
-    await this.prisma.prisma.review.delete({ where: { id } });
+    const review = await this.prisma.prisma.review.findUnique({
+      where: { id },
+      select: { productId: true, product: { select: { slug: true } } },
+    });
+    if (!review) throw new NotFoundException('Review not found');
+
+    await this.prisma.prisma.$transaction(async (tx) => {
+      await tx.review.delete({ where: { id } });
+      const agg = await tx.review.aggregate({
+        where: { productId: review.productId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      });
+      const avg = agg._avg.rating ? Number(agg._avg.rating) : 0;
+      await tx.product.update({
+        where: { id: review.productId },
+        data: { reviewCount: agg._count._all, rating: avg.toFixed(2) },
+      });
+    });
+
+    await this.cache.del(`cache:product:slug:${review.product.slug}`);
     return null;
   }
 }
