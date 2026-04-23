@@ -17,9 +17,12 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy.js';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.getOrThrow<string>('JWT_SECRET'),
+        secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
         signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') as StringValue,
+          expiresIn: config.get<string>(
+            'JWT_ACCESS_EXPIRES_IN',
+            '15m',
+          ) as StringValue,
         },
       }),
     }),

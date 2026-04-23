@@ -93,15 +93,20 @@ export class AuthService {
   async refresh(
     userId: string,
     role: Role,
-  ): Promise<Pick<AuthResponseDto, 'accessToken'>> {
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const accessToken = this.signAccessToken(userId, role);
     const refreshToken = this.signRefreshToken(userId, role);
     await this.cache.set(`refresh:${userId}`, refreshToken, 7 * 24 * 60 * 60);
-    return { accessToken };
+    return { accessToken, refreshToken };
   }
 
   getRefreshToken(userId: string, role: Role): string {
     return this.signRefreshToken(userId, role);
+  }
+
+  async getCachedRefreshToken(userId: string): Promise<string | null> {
+    const value = await this.cache.get<string>(`refresh:${userId}`);
+    return value ?? null;
   }
 
   private async buildAuthResponse(
@@ -128,9 +133,9 @@ export class AuthService {
     return this.jwtService.sign(
       { sub: userId, role },
       {
-        secret: this.config.getOrThrow<string>('JWT_SECRET'),
+        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: this.config.get<string>(
-          'JWT_EXPIRES_IN',
+          'JWT_ACCESS_EXPIRES_IN',
           '15m',
         ) as StringValue,
       },
@@ -142,7 +147,10 @@ export class AuthService {
       { sub: userId, role },
       {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '7d' as StringValue,
+        expiresIn: this.config.get<string>(
+          'JWT_REFRESH_EXPIRES_IN',
+          '7d',
+        ) as StringValue,
       },
     );
   }

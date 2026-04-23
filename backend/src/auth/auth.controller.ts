@@ -1,5 +1,14 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { AuthService } from './auth.service.js';
@@ -25,6 +34,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Register a new user' })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.register(dto);
@@ -35,6 +45,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Login with email and password' })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
@@ -55,12 +66,15 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'Rotate refresh token and get new access token' })
-  async refresh(@CurrentUser() user: Express.User, @Res({ passthrough: true }) res: Response) {
+  async refresh(
+    @CurrentUser() user: Express.User,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.refresh(user.id, user.role);
-    const newRefreshToken = this.authService.getRefreshToken(user.id, user.role);
-    res.cookie('refresh_token', newRefreshToken, REFRESH_COOKIE_OPTIONS);
-    return result;
+    res.cookie('refresh_token', result.refreshToken, REFRESH_COOKIE_OPTIONS);
+    return { accessToken: result.accessToken };
   }
 }
