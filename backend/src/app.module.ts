@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { Redis } from 'ioredis';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -27,7 +28,8 @@ import { LicensesModule } from './licenses/licenses.module.js';
     // Global rate limiting
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
 
-    // Global Redis cache
+    // Global Redis cache — keyed under 'cache:' prefix so reset only scopes our keys
+    // (safe when Redis instance is shared with other apps / queues).
     CacheModule.registerAsync({
       isGlobal: true,
       inject: [ConfigService],
@@ -37,7 +39,7 @@ import { LicensesModule } from './licenses/licenses.module.js';
             host: config.get('REDIS_HOST', 'localhost'),
             port: config.get<number>('REDIS_PORT', 6379),
           });
-          // ioredis store compatible shape for cache-manager
+          const CACHE_PREFIX = 'cache:';
           return {
             get: async (key: string) => redis.get(key),
             set: async (key: string, value: string, ttl?: number) => {
@@ -45,7 +47,16 @@ import { LicensesModule } from './licenses/licenses.module.js';
               else await redis.set(key, value);
             },
             del: async (key: string) => redis.del(key),
-            reset: async () => redis.flushdb(),
+            reset: async () => {
+              // Scoped reset: SCAN + UNLINK only keys under our prefix.
+              const stream = redis.scanStream({
+                match: `${CACHE_PREFIX}*`,
+                count: 500,
+              });
+              for await (const keys of stream as AsyncIterable<string[]>) {
+                if (keys.length) await redis.unlink(...keys);
+              }
+            },
           };
         },
       }),
@@ -69,6 +80,6 @@ import { LicensesModule } from './licenses/licenses.module.js';
     LicensesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

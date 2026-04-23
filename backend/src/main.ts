@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
@@ -24,13 +26,18 @@ const validateOrigin = (raw: string, isProd: boolean, label: string): string => 
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger('Bootstrap');
+
+  // Trust first reverse-proxy hop so req.ip / x-forwarded-for reflect real client
+  // (used by ThrottlerGuard and VNPay IP field). In prod adjust hop count to match infra.
+  app.set('trust proxy', 1);
 
   // Global prefix
   app.setGlobalPrefix('api/v1');
 
   // Middleware
+  app.use(helmet());
   app.use(cookieParser());
 
   const isProd = process.env['NODE_ENV'] === 'production';
