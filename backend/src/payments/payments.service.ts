@@ -14,24 +14,9 @@ import {
   InitiatePaymentDto,
   PaymentMethodEnum,
 } from './dto/initiate-payment.dto.js';
+import { MomoIpnDto } from './dto/momo-ipn.dto.js';
 
-const PLATFORM_FEE = 0.1; // 10%
-
-interface MomoIpnBody {
-  partnerCode: string;
-  orderId: string;
-  requestId: string;
-  amount: number;
-  orderInfo: string;
-  orderType: string;
-  transId: number;
-  resultCode: number;
-  message: string;
-  payType: string;
-  responseTime: number;
-  extraData: string;
-  signature: string;
-}
+const DEFAULT_PLATFORM_FEE = 0.1; // 10%
 
 interface VnpayReturnQuery {
   vnp_TxnRef?: string;
@@ -44,12 +29,20 @@ interface VnpayReturnQuery {
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
+  private readonly platformFee: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    const raw = this.config.get<string>('PLATFORM_FEE');
+    const parsed = raw === undefined ? NaN : Number(raw);
+    this.platformFee =
+      Number.isFinite(parsed) && parsed >= 0 && parsed < 1
+        ? parsed
+        : DEFAULT_PLATFORM_FEE;
+  }
 
   // ─── Initiate ────────────────────────────────────────────────────────────────
 
@@ -167,7 +160,7 @@ export class PaymentsService {
     return data.payUrl;
   }
 
-  async handleMomoWebhook(body: MomoIpnBody): Promise<{ message: string }> {
+  async handleMomoWebhook(body: MomoIpnDto): Promise<{ message: string }> {
     const secretKey = this.config.getOrThrow<string>('MOMO_SECRET_KEY');
     const accessKey = this.config.getOrThrow<string>('MOMO_ACCESS_KEY');
 
@@ -196,7 +189,7 @@ export class PaymentsService {
       this.logger.warn(
         `MoMo IPN invalid signature for orderId=${body.orderId}`,
       );
-      return { message: 'Invalid signature' };
+      throw new BadRequestException('Invalid signature');
     }
 
     if (body.resultCode === 0) {
@@ -360,19 +353,15 @@ export class PaymentsService {
       return;
     }
 
-    if (payment.status === 'COMPLETED') {
-      this.logger.warn(`Payment ${paymentId} already completed — skipping`);
-      return;
-    }
-
     const { order } = payment;
 
-    await this.prisma.prisma.$transaction(async (tx) => {
-      // 1. Mark payment COMPLETED
-      await tx.payment.update({
-        where: { id: paymentId },
+    const claimed = await this.prisma.prisma.$transaction(async (tx) => {
+      // 1. Atomically claim PENDING -> COMPLETED. Skips work on duplicate IPNs.
+      const updated = await tx.payment.updateMany({
+        where: { id: paymentId, status: 'PENDING' },
         data: { status: 'COMPLETED', gatewayRef, paidAt: new Date() },
       });
+      if (updated.count === 0) return false;
 
       // 2. Mark order PAID
       await tx.order.update({
@@ -380,20 +369,18 @@ export class PaymentsService {
         data: { status: 'PAID' },
       });
 
-      // 3. Credit sellers
+      // 3. Credit sellers (upsert wallet so missing wallets don't silently drop revenue)
       for (const item of order.items) {
-        const sellerAmount = Number(item.product.price) * (1 - PLATFORM_FEE);
+        const sellerAmount = Number(item.product.price) * (1 - this.platformFee);
 
-        const wallet = await tx.wallet.findUnique({
+        const wallet = await tx.wallet.upsert({
           where: { userId: item.product.sellerId },
+          create: {
+            userId: item.product.sellerId,
+            balance: sellerAmount.toFixed(2),
+          },
+          update: { balance: { increment: sellerAmount } },
           select: { id: true },
-        });
-
-        if (!wallet) continue;
-
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: sellerAmount } },
         });
 
         await tx.walletTransaction.create({
@@ -438,16 +425,25 @@ export class PaymentsService {
         },
       });
 
-      // 5. Update product totalSales
+      // 6. Update product totalSales
       for (const item of order.items) {
         await tx.product.update({
           where: { id: item.product.id },
           data: { totalSales: { increment: 1 } },
         });
       }
+
+      return true;
     });
 
-    // 6. Notifications (outside transaction — non-critical)
+    if (!claimed) {
+      this.logger.warn(
+        `Payment ${paymentId} already processed — duplicate IPN ignored`,
+      );
+      return;
+    }
+
+    // 7. Notifications (outside transaction — non-critical)
     await this.notifications.createNotification(
       order.buyerId,
       'Payment confirmed',

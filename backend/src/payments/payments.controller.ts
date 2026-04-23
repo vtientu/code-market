@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -19,6 +20,11 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { PaymentsService } from './payments.service.js';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto.js';
+import { MomoIpnDto } from './dto/momo-ipn.dto.js';
+import {
+  MomoIpAllowlistGuard,
+  VnpayIpAllowlistGuard,
+} from './guards/ip-allowlist.guard.js';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -27,6 +33,7 @@ export class PaymentsController {
 
   @Post('initiate')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.BUYER)
   @ApiBearerAuth()
@@ -36,27 +43,22 @@ export class PaymentsController {
     @Body() dto: InitiatePaymentDto,
     @Req() req: Request,
   ) {
-    const ip =
-      (req.headers['x-forwarded-for'] as string | undefined)
-        ?.split(',')[0]
-        ?.trim() ??
-      req.socket.remoteAddress ??
-      '127.0.0.1';
+    const ip = req.ip ?? req.socket.remoteAddress ?? '127.0.0.1';
     return this.paymentsService.initiatePayment(user.id, dto, ip);
   }
 
   @Post('webhook/momo')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'MoMo IPN webhook handler (signature verified)' })
-  handleMomoWebhook(@Body() body: Record<string, unknown>) {
-    return this.paymentsService.handleMomoWebhook(
-      body as unknown as Parameters<PaymentsService['handleMomoWebhook']>[0],
-    );
+  @UseGuards(MomoIpAllowlistGuard)
+  @ApiOperation({ summary: 'MoMo IPN webhook handler (signature + IP verified)' })
+  handleMomoWebhook(@Body() body: MomoIpnDto) {
+    return this.paymentsService.handleMomoWebhook(body);
   }
 
   @Post('webhook/vnpay')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'VNPay IPN webhook handler (checksum verified)' })
+  @UseGuards(VnpayIpAllowlistGuard)
+  @ApiOperation({ summary: 'VNPay IPN webhook handler (checksum + IP verified)' })
   handleVnpayWebhook(@Query() query: Record<string, string>) {
     return this.paymentsService.handleVnpayWebhook(query);
   }
